@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pusoy Dos Multiplayer</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a4314;
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .hidden { display: none !important; }
+        input, button {
+            padding: 10px;
+            font-size: 16px;
+            margin: 5px;
+            border-radius: 5px;
+            border: none;
+        }
+        button {
+            background-color: #ffcc00;
+            color: #1a4314;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background-color: #e6b800; }
+        .card-area {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .card {
+            background: white;
+            color: black;
+            border-radius: 5px;
+            padding: 15px 10px;
+            margin: 5px;
+            min-width: 40px;
+            font-size: 20px;
+            font-weight: bold;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            cursor: pointer;
+            user-select: none;
+        }
+        .red { color: red; }
+        .selected {
+            transform: translateY(-15px);
+            box-shadow: 0px 5px 15px #ffcc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>♣ ♦ Pusoy Dos Game ♥ ♠</h1>
+
+        <!-- Login Menu -->
+        <div id="login-screen">
+            <input type="text" id="player-name" placeholder="Enter Your Name">
+            <input type="text" id="room-id" placeholder="Enter Room Code">
+            <button onclick="joinGame()">Join Room</button>
+        </div>
+
+        <!-- Waiting Lobby -->
+        <div id="lobby-screen" class="hidden">
+            <h3>Lobby Room: <span id="display-room"></span></h3>
+            <p>Players connected:</p>
+            <ul id="player-list" style="list-style:none; padding:0;"></ul>
+            <button id="start-btn" onclick="startGame()">Start Game</button>
+        </div>
+
+        <!-- Active Game Board -->
+        <div id="game-screen" class="hidden">
+            <h3 id="turn-indicator">Waiting for turns...</h3>
+            <div id="table-discard">
+                <p>Last Played Hand:</p>
+                <div id="last-hand" class="card-area">*(Empty Table)*</div>
+            </div>
+            <hr>
+            <h3>Your Cards (13 Cards Dealt)</h3>
+            <div id="my-hand" class="card-area"></div>
+            <button onclick="passTurn()">Pass</button>
+            <button onclick="playCards()">Play Selected Cards</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myCards = [];
+        let currentRoom = "";
+
+        function joinGame() {
+            const playerName = document.getElementById('player-name').value;
+            currentRoom = document.getElementById('room-id').value;
+            if (!playerName || !currentRoom) return alert("Fill in both fields!");
+
+            socket.emit('joinRoom', { roomId: currentRoom, playerName });
+            
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+            document.getElementById('display-room').innerText = currentRoom;
+        }
+
+        socket.on('roomUpdate', (players) => {
+            const list = document.getElementById('player-list');
+            list.innerHTML = players.map(p => `<li>👤 ${p.name}</li>`).join('');
+        });
+
+        function startGame() {
+            socket.emit('startGame', currentRoom);
+        }
+
+        socket.on('gameStarted', (data) => {
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            updateTurn(data.currentTurn);
+        });
+
+        socket.on('yourCards', (cards) => {
+            myCards = cards;
+            renderHand();
+        });
+
+        function renderHand() {
+            const handDiv = document.getElementById('my-hand');
+            handDiv.innerHTML = "";
+            myCards.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card';
+                if (card.suit === '♦' || card.suit === '♥') cardEl.classList.add('red');
+                cardEl.innerText = card.rank + card.suit;
+                
+                // Toggle card selection
+                cardEl.onclick = () => {
+                    cardEl.classList.toggle('selected');
+                };
+                handDiv.appendChild(cardEl);
+            });
+        }
+
+        function updateTurn(activePlayerId) {
+            const indicator = document.getElementById('turn-indicator');
+            if (activePlayerId === socket.id) {
+                indicator.innerText = "🔴 IT IS YOUR TURN! Play your lowest card combo.";
+            } else {
+                indicator.innerText = "Waiting for opponents to drop cards...";
+            }
+        }
+
+        function playCards() {
+            // Placeholder click action - logic handled on expansion
+            alert("Card evaluation logic will process here!");
+        }
+
+        function passTurn() {
+            alert("Passed turn!");
+        }
+    </script>
+</body>
+</html>
