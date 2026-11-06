@@ -25,7 +25,6 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Save the chosen avatar along with player info
         room.players.push({ 
             id: socket.id, 
             name: playerName, 
@@ -54,15 +53,21 @@ io.on('connection', (socket) => {
             player.cards = room.deck.splice(0, 13).sort((a, b) => a.value - b.value);
         });
 
-        // The player holding the 3 of Clubs (value 0) always goes first
+        // Dynamic Turn Finder: Find the absolute lowest card value currently held by active players
+        let absoluteLowestValue = Infinity;
         let startingPlayerIndex = 0;
+
         room.players.forEach((player, idx) => {
-            if (player.cards.some(c => c.value === 0)) { 
-                startingPlayerIndex = idx;
+            if (player.cards.length > 0) {
+                const playerLowestCard = player.cards[0].value; // First card is lowest due to sort
+                if (playerLowestCard < absoluteLowestValue) {
+                    absoluteLowestValue = playerLowestCard;
+                    startingPlayerIndex = idx;
+                }
             }
         });
+        
         room.currentTurn = startingPlayerIndex;
-
         sendGameState(roomId);
     });
 
@@ -73,18 +78,14 @@ io.on('connection', (socket) => {
         
         if (player.id !== socket.id) return; 
 
-        // --- PUSOY DOS VALIDATION LOGIC ---
-        // Sort selected cards by rule value
         selectedCards.sort((a, b) => a.value - b.value);
 
         if (room.lastPlayedHand && room.lastPlayedHand.length > 0) {
-            // Must drop the exact same count of cards (e.g. Single vs Single, Pair vs Pair)
             if (selectedCards.length !== room.lastPlayedHand.length) {
                 socket.emit('errorMsg', `You must play exactly ${room.lastPlayedHand.length} card(s)!`);
                 return;
             }
 
-            // Simple validation for Singles and Pairs
             if (selectedCards.length === 1) {
                 if (selectedCards[0].value <= room.lastPlayedHand[0].value) {
                     socket.emit('errorMsg', 'Card value is too low to beat the table!');
@@ -95,28 +96,24 @@ io.on('connection', (socket) => {
                     socket.emit('errorMsg', 'Invalid pair! Cards must be the same rank.');
                     return;
                 }
-                // Compare highest card of the pair to beat the last highest card
                 if (selectedCards[1].value <= room.lastPlayedHand[1].value) {
                     socket.emit('errorMsg', 'Pair value is too low to beat the table!');
                     return;
                 }
             }
-            // (Note: 5-card hand combos can expand here later!)
         } else {
-            // New round tracking validation
             if (selectedCards.length === 2 && selectedCards[0].rank !== selectedCards[1].rank) {
                 socket.emit('errorMsg', 'Invalid combination!');
                 return;
             }
         }
 
-        // Remove validated played cards from hand
         player.cards = player.cards.filter(pc => 
             !selectedCards.some(sc => sc.rank === pc.rank && sc.suit === pc.suit)
         );
 
         room.lastPlayedHand = selectedCards;
-        room.passCount = 0; // Reset pass count on safe play
+        room.passCount = 0; 
 
         if (player.cards.length === 0) {
             player.chips += room.currentPot;
@@ -137,8 +134,6 @@ io.on('connection', (socket) => {
         if (room.players[room.currentTurn].id !== socket.id) return;
 
         room.passCount++;
-        
-        // If everyone passes back to the master controller, clear table context pool
         if (room.passCount >= room.players.length - 1) {
             room.lastPlayedHand = null;
             room.passCount = 0;
