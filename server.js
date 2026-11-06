@@ -53,13 +53,12 @@ io.on('connection', (socket) => {
             player.cards = room.deck.splice(0, 13).sort((a, b) => a.value - b.value);
         });
 
-        // Dynamic Turn Finder: Find the absolute lowest card value currently held by active players
         let absoluteLowestValue = Infinity;
         let startingPlayerIndex = 0;
 
         room.players.forEach((player, idx) => {
             if (player.cards.length > 0) {
-                const playerLowestCard = player.cards[0].value; // First card is lowest due to sort
+                const playerLowestCard = player.cards[0].value; 
                 if (playerLowestCard < absoluteLowestValue) {
                     absoluteLowestValue = playerLowestCard;
                     startingPlayerIndex = idx;
