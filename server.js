@@ -14,10 +14,10 @@ const rooms = {};
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    socket.on('joinRoom', ({ roomId, playerName }) => {
+    socket.on('joinRoom', ({ roomId, playerName, avatar }) => {
         socket.join(roomId);
         if (!rooms[roomId]) {
-            rooms[roomId] = { players: [], deck: [], currentTurn: 0, gameStarted: false, lastPlayedHand: null, currentPot: 0 };
+            rooms[roomId] = { players: [], deck: [], currentTurn: 0, gameStarted: false, lastPlayedHand: null, currentPot: 0, passCount: 0 };
         }
         const room = rooms[roomId];
         if (room.players.length >= 4 || room.gameStarted) {
@@ -25,8 +25,14 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Players join with 5,000 starting chips!
-        room.players.push({ id: socket.id, name: playerName, cards: [], chips: 5000 });
+        // Save the chosen avatar along with player info
+        room.players.push({ 
+            id: socket.id, 
+            name: playerName, 
+            avatar: avatar || "👤", 
+            cards: [], 
+            chips: 5000 
+        });
         io.to(roomId).emit('roomUpdate', room.players);
     });
 
@@ -36,8 +42,9 @@ io.on('connection', (socket) => {
 
         room.gameStarted = true;
         room.deck = createPusoyDeck();
+        room.lastPlayedHand = null;
+        room.passCount = 0;
         
-        // 500 chip ante collected from every player for the match entry pot
         const ante = 500;
         room.currentPot = 0;
         
@@ -47,6 +54,7 @@ io.on('connection', (socket) => {
             player.cards = room.deck.splice(0, 13).sort((a, b) => a.value - b.value);
         });
 
+        // The player holding the 3 of Clubs (value 0) always goes first
         let startingPlayerIndex = 0;
         room.players.forEach((player, idx) => {
             if (player.cards.some(c => c.value === 0)) { 
@@ -65,13 +73,51 @@ io.on('connection', (socket) => {
         
         if (player.id !== socket.id) return; 
 
+        // --- PUSOY DOS VALIDATION LOGIC ---
+        // Sort selected cards by rule value
+        selectedCards.sort((a, b) => a.value - b.value);
+
+        if (room.lastPlayedHand && room.lastPlayedHand.length > 0) {
+            // Must drop the exact same count of cards (e.g. Single vs Single, Pair vs Pair)
+            if (selectedCards.length !== room.lastPlayedHand.length) {
+                socket.emit('errorMsg', `You must play exactly ${room.lastPlayedHand.length} card(s)!`);
+                return;
+            }
+
+            // Simple validation for Singles and Pairs
+            if (selectedCards.length === 1) {
+                if (selectedCards[0].value <= room.lastPlayedHand[0].value) {
+                    socket.emit('errorMsg', 'Card value is too low to beat the table!');
+                    return;
+                }
+            } else if (selectedCards.length === 2) {
+                if (selectedCards[0].rank !== selectedCards[1].rank) {
+                    socket.emit('errorMsg', 'Invalid pair! Cards must be the same rank.');
+                    return;
+                }
+                // Compare highest card of the pair to beat the last highest card
+                if (selectedCards[1].value <= room.lastPlayedHand[1].value) {
+                    socket.emit('errorMsg', 'Pair value is too low to beat the table!');
+                    return;
+                }
+            }
+            // (Note: 5-card hand combos can expand here later!)
+        } else {
+            // New round tracking validation
+            if (selectedCards.length === 2 && selectedCards[0].rank !== selectedCards[1].rank) {
+                socket.emit('errorMsg', 'Invalid combination!');
+                return;
+            }
+        }
+
+        // Remove validated played cards from hand
         player.cards = player.cards.filter(pc => 
             !selectedCards.some(sc => sc.rank === pc.rank && sc.suit === pc.suit)
         );
 
         room.lastPlayedHand = selectedCards;
+        room.passCount = 0; // Reset pass count on safe play
 
-        // Win check: first player out of cards takes the entire match pot!
         if (player.cards.length === 0) {
             player.chips += room.currentPot;
             io.to(roomId).emit('gameOver', `${player.name} won the round and took the 🪙 ${room.currentPot} chip pot! 🎉`);
@@ -89,6 +135,14 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         if (room.players[room.currentTurn].id !== socket.id) return;
+
+        room.passCount++;
+        
+        // If everyone passes back to the master controller, clear table context pool
+        if (room.passCount >= room.players.length - 1) {
+            room.lastPlayedHand = null;
+            room.passCount = 0;
+        }
 
         room.currentTurn = (room.currentTurn + 1) % room.players.length;
         sendGameState(roomId);
@@ -111,7 +165,7 @@ function sendGameState(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     io.to(roomId).emit('gameStateUpdate', {
-        players: room.players.map(p => ({ id: p.id, name: p.name, cardCount: p.cards.length, chips: p.chips })),
+        players: room.players.map(p => ({ id: p.id, name: p.name, avatar: p.avatar, cardCount: p.cards.length, chips: p.chips })),
         currentTurn: room.players[room.currentTurn] ? room.players[room.currentTurn].id : null,
         lastHand: room.lastPlayedHand,
         pot: room.currentPot,
