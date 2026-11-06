@@ -22,7 +22,7 @@
             border-radius: 10px;
         }
         .hidden { display: none !important; }
-        input, button {
+        input, button, select {
             padding: 10px;
             font-size: 16px;
             margin: 5px;
@@ -70,6 +70,11 @@
             font-weight: bold;
             font-size: 14px;
         }
+        .avatar-display {
+            font-size: 24px;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -80,14 +85,27 @@
         <div id="login-screen">
             <input type="text" id="player-name" placeholder="Enter Your Name">
             <input type="text" id="room-id" placeholder="Enter Room Code">
+            
+            <div style="margin: 15px 0;">
+                <label for="avatar-select" style="font-size: 16px; font-weight: bold;">Choose Your Character:</label>
+                <select id="avatar-select">
+                    <option value="😎">😎 Cool Gambler</option>
+                    <option value="🦊">🦊 Lucky Fox</option>
+                    <option value="🐱">🐱 Card Cat</option>
+                    <option value="🐼">🐼 Pro Panda</option>
+                    <option value="👑">👑 Card King</option>
+                    <option value="🧙‍♂️">🧙‍♂️ Card Wizard</option>
+                </select>
+            </div>
+            
             <button onclick="joinGame()">Join Room</button>
         </div>
 
         <!-- Waiting Lobby -->
         <div id="lobby-screen" class="hidden">
             <h3>Lobby Room: <span id="display-room"></span></h3>
-            <p>Players connected (Every player starts with 🪙 5,000 chips):</p>
-            <ul id="player-list" style="list-style:none; padding:0; font-size:18px; line-height:2;"></ul>
+            <p>Players connected:</p>
+            <ul id="player-list" style="list-style:none; padding:0; font-size:18px; line-height:2.5;"></ul>
             <button id="start-btn" onclick="startGame()">Start Game (Ante: 500)</button>
         </div>
 
@@ -127,9 +145,11 @@
         function joinGame() {
             const playerName = document.getElementById('player-name').value;
             currentRoom = document.getElementById('room-id').value;
+            const chosenAvatar = document.getElementById('avatar-select').value;
+            
             if (!playerName || !currentRoom) return alert("Fill in both fields!");
 
-            socket.emit('joinRoom', { roomId: currentRoom, playerName });
+            socket.emit('joinRoom', { roomId: currentRoom, playerName, avatar: chosenAvatar });
             
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
@@ -138,7 +158,7 @@
 
         socket.on('roomUpdate', (players) => {
             const list = document.getElementById('player-list');
-            list.innerHTML = players.map(p => `<li>👤 ${p.name} <span class="chip-badge">🪙 ${p.chips}</span></li>`).join('');
+            list.innerHTML = players.map(p => `<li><span class="avatar-display">${p.avatar}</span> <strong>${p.name}</strong> <span class="chip-badge">🪙 ${p.chips}</span></li>`).join('');
         });
 
         function startGame() {
@@ -151,22 +171,19 @@
             
             document.getElementById('pot-indicator').innerText = `Table Pot: 🪙 ${data.pot}`;
             
-            // Render active game room status list
             const chipsList = document.getElementById('player-chips-list');
             chipsList.innerHTML = data.players.map(p => 
-                `<p style="margin:5px 0;">👤 <strong>${p.name}</strong>: ${p.cardCount} cards left | 🪙 ${p.chips} chips</p>`
+                `<p style="margin:8px 0; font-size:16px;"><span class="avatar-display">${p.avatar}</span> <strong>${p.name}</strong>: ${p.cardCount} cards left | 🪙 ${p.chips} chips</p>`
             ).join('');
 
-            // Highlight whose turn it is
             const indicator = document.getElementById('turn-indicator');
             if (data.currentTurn === socket.id) {
-                indicator.innerText = "🔴 IT IS YOUR TURN! Select combos and drop cards.";
+                indicator.innerText = "🔴 IT IS YOUR TURN! Select combo and drop higher cards.";
             } else {
                 const activePlayer = data.players.find(p => p.id === data.currentTurn);
-                indicator.innerText = `Waiting for ${activePlayer ? activePlayer.name : 'opponents'} to drop cards...`;
+                indicator.innerText = `Waiting for ${activePlayer ? activePlayer.name : 'opponent'} to drop cards...`;
             }
 
-            // Display table pool's last played hand
             const lastHandDiv = document.getElementById('last-hand');
             if (data.lastHand && data.lastHand.length > 0) {
                 lastHandDiv.innerHTML = data.lastHand.map(c => {
@@ -174,7 +191,7 @@
                     return `<div class="card ${isRed}">${c.rank}${c.suit}</div>`;
                 }).join('');
             } else {
-                lastHandDiv.innerHTML = "*(Empty Table - Play any card configuration)*";
+                lastHandDiv.innerHTML = "*(Empty Table - Play any card combo)*";
             }
         });
 
@@ -195,7 +212,7 @@
         function renderHand() {
             const handDiv = document.getElementById('my-hand');
             handDiv.innerHTML = "";
-            selectedHand = []; // reset tracking
+            selectedHand = []; 
             
             myCards.forEach((card) => {
                 const cardEl = document.createElement('div');
