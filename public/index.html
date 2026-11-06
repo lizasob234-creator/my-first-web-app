@@ -3,30 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pusoy Dos Multiplayer</title>
+    <title>Pusoy Dos Poker Room</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #1a4314;
+            background-color: #0f2310;
             color: white;
             text-align: center;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: auto;
-            background: rgba(0, 0, 0, 0.4);
-            padding: 20px;
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
         }
         .hidden { display: none !important; }
         input, button, select {
-            padding: 10px;
+            padding: 12px;
             font-size: 16px;
-            margin: 5px;
-            border-radius: 5px;
+            margin: 8px;
+            border-radius: 6px;
             border: none;
         }
         button {
@@ -36,102 +37,145 @@
             cursor: pointer;
         }
         button:hover { background-color: #e6b800; }
+        
+        /* Interactive Circular Poker Table UI */
+        .poker-table-container {
+            position: relative;
+            width: 100%;
+            max-width: 650px;
+            height: 380px;
+            background: radial-gradient(circle, #1b5e20 60%, #0d3c12 100%);
+            margin: 20px auto;
+            border: 14px solid #5d4037;
+            border-radius: 200px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8), 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .center-pot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 2;
+        }
+        
+        /* Seat positions around the edge */
+        .player-seat {
+            position: absolute;
+            width: 90px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .seat-0 { bottom: -10px; left: 43%; } /* Main Player (Bottom) */
+        .seat-1 { top: 40%; left: -30px; }   /* Left Position */
+        .seat-2 { top: -20px; left: 43%; }   /* Top Position */
+        .seat-3 { top: 40%; right: -30px; }  /* Right Position */
+
+        .avatar-frame {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid #ccc;
+            margin: 0 auto 4px;
+            background-size: cover;
+            background-position: center;
+            background-color: #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        }
+        .active-turn .avatar-frame {
+            border-color: #ffcc00;
+            box-shadow: 0 0 20px #ffcc00;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+        
+        .seat-name { font-weight: bold; font-size: 13px; text-shadow: 1px 1px 2px black; }
+        .seat-chips { font-size: 11px; color: #ffcc00; font-weight: bold; }
+        .seat-cards-left { background: #d32f2f; padding: 1px 5px; border-radius: 4px; font-size: 11px; margin-top: 2px; display: inline-block; }
+
         .card-area {
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
-            margin: 20px 0;
+            margin: 15px 0;
             min-height: 80px;
         }
         .card {
             background: white;
             color: black;
-            border-radius: 5px;
-            padding: 15px 10px;
-            margin: 5px;
-            min-width: 45px;
+            border-radius: 6px;
+            padding: 14px 8px;
+            margin: 4px;
+            min-width: 42px;
             font-size: 20px;
             font-weight: bold;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.6);
             cursor: pointer;
             user-select: none;
             transition: transform 0.1s ease;
         }
         .red { color: red; }
-        .selected {
-            transform: translateY(-20px);
-            box-shadow: 0px 5px 15px #ffcc00;
-        }
-        .chip-badge {
-            background-color: #ffcc00;
-            color: black;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        .avatar-display {
-            font-size: 24px;
-            vertical-align: middle;
-            margin-right: 5px;
-        }
+        .selected { transform: translateY(-22px); box-shadow: 0 6px 15px #ffcc00; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>♣ ♦ Pusoy Dos Game ♥ ♠</h1>
+        <h1>♣ ♦ Pusoy Dos Poker Room ♥ ♠</h1>
 
-        <!-- Login Menu -->
+        <!-- Custom Multi-Option Avatar Login -->
         <div id="login-screen">
-            <input type="text" id="player-name" placeholder="Enter Your Name">
-            <input type="text" id="room-id" placeholder="Enter Room Code">
+            <input type="text" id="player-name" placeholder="Enter Your Name"><br>
+            <input type="text" id="room-id" placeholder="Enter Room Code"><br>
             
-            <div style="margin: 15px 0;">
-                <label for="avatar-select" style="font-size: 16px; font-weight: bold;">Choose Your Character:</label>
-                <select id="avatar-select">
-                    <option value="😎">😎 Cool Gambler</option>
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; max-width: 320px; margin: 10px auto;">
+                <label style="font-weight:bold; display:block; margin-bottom:8px;">Set Profile Avatar:</label>
+                <select id="avatar-select" onchange="toggleAvatarType()">
+                    <option value="😎">😎 Cool Emoji</option>
                     <option value="🦊">🦊 Lucky Fox</option>
                     <option value="🐱">🐱 Card Cat</option>
-                    <option value="🐼">🐼 Pro Panda</option>
                     <option value="👑">👑 Card King</option>
-                    <option value="🧙‍♂️">🧙‍♂️ Card Wizard</option>
+                    <option value="UPLOAD">📤 Upload Custom Photo</option>
                 </select>
+                <div id="upload-container" class="hidden" style="margin-top: 10px;">
+                    <input type="file" id="avatar-file" accept="image/*" style="font-size:12px;">
+                </div>
             </div>
             
-            <button onclick="joinGame()">Join Room</button>
+            <button onclick="joinGame()">Join Table Room</button>
         </div>
 
         <!-- Waiting Lobby -->
         <div id="lobby-screen" class="hidden">
-            <h3>Lobby Room: <span id="display-room"></span></h3>
-            <p>Players connected:</p>
-            <ul id="player-list" style="list-style:none; padding:0; font-size:18px; line-height:2.5;"></ul>
+            <h3>Lobby Room Code: <span id="display-room"></span></h3>
+            <p>Players sitting at table:</p>
+            <ul id="player-list" style="list-style:none; padding:0; font-size:18px;"></ul>
             <button id="start-btn" onclick="startGame()">Start Game (Ante: 500)</button>
         </div>
 
-        <!-- Active Game Board -->
+        <!-- Active Circular Poker Room Table Layout -->
         <div id="game-screen" class="hidden">
-            <h2 id="pot-indicator" style="color: #ffcc00;">Table Pot: 🪙 0</h2>
-            <h3 id="turn-indicator">Waiting for turns...</h3>
-            
-            <div id="table-discard" style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
-                <p style="margin-top:0; font-weight:bold;">Last Played Hand:</p>
-                <div id="last-hand" class="card-area">*(Empty Table)*</div>
+            <div class="poker-table-container">
+                <div class="center-pot">
+                    <h3 id="pot-indicator" style="color: #ffcc00; margin:0 0 5px 0;">POT: 🪙 0</h3>
+                    <div id="last-hand" class="card-area" style="min-height:60px; scale: 0.85;">*(Empty Table)*</div>
+                </div>
+                
+                <!-- Digital seats mapping -->
+                <div id="seats-wrapper"></div>
             </div>
             
-            <hr style="margin: 25px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.2);">
+            <h3 id="turn-indicator" style="color: #ffcc00; min-height: 24px;">Configuring dealer table...</h3>
             
             <h3>Your Hand (Select cards to drop)</h3>
             <div id="my-hand" class="card-area"></div>
             
-            <div style="margin-top: 20px;">
-                <button onclick="passTurn()" style="background-color: #bbbbbb; color: black;">Pass Turn</button>
+            <div>
+                <button onclick="passTurn()" style="background-color: #777; color: white;">Pass Turn</button>
                 <button onclick="playCards()">Play Selected Cards</button>
-            </div>
-
-            <div style="margin-top: 30px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px;">
-                <h4>Match Standings</h4>
-                <div id="player-chips-list"></div>
             </div>
         </div>
     </div>
@@ -141,24 +185,54 @@
         let myCards = [];
         let selectedHand = [];
         let currentRoom = "";
+        let finalAvatarData = "😎";
+
+        function toggleAvatarType() {
+            const select = document.getElementById('avatar-select').value;
+            const uploadBox = document.getElementById('upload-container');
+            if (select === "UPLOAD") {
+                uploadBox.classList.remove('hidden');
+            } else {
+                uploadBox.classList.add('hidden');
+                finalAvatarData = select;
+            }
+        }
 
         function joinGame() {
             const playerName = document.getElementById('player-name').value;
             currentRoom = document.getElementById('room-id').value;
-            const chosenAvatar = document.getElementById('avatar-select').value;
-            
-            if (!playerName || !currentRoom) return alert("Fill in both fields!");
+            if (!playerName || !currentRoom) return alert("Fill in details!");
 
-            socket.emit('joinRoom', { roomId: currentRoom, playerName, avatar: chosenAvatar });
-            
+            const selectVal = document.getElementById('avatar-select').value;
+            if (selectVal === "UPLOAD") {
+                const fileInput = document.getElementById('avatar-file');
+                if (fileInput.files && fileInput.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        finalAvatarData = e.target.result; // Compress base64 file image string
+                        proceedToJoin(playerName, currentRoom);
+                    }
+                    reader.readAsDataURL(fileInput.files[0]);
+                    return;
+                }
+            }
+            proceedToJoin(playerName, currentRoom);
+        }
+
+        function proceedToJoin(name, room) {
+            socket.emit('joinRoom', { roomId: room, playerName: name, avatar: finalAvatarData });
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
-            document.getElementById('display-room').innerText = currentRoom;
+            document.getElementById('display-room').innerText = room;
         }
 
         socket.on('roomUpdate', (players) => {
             const list = document.getElementById('player-list');
-            list.innerHTML = players.map(p => `<li><span class="avatar-display">${p.avatar}</span> <strong>${p.name}</strong> <span class="chip-badge">🪙 ${p.chips}</span></li>`).join('');
+            list.innerHTML = players.map(p => {
+                const isImage = p.avatar.startsWith('data:image');
+                const avStyle = isImage ? `background-image:url('${p.avatar}')` : '';
+                return `<li style="margin:10px 0;"><span style="display:inline-block; width:30px; height:30px; border-radius:50%; vertical-align:middle; background-size:cover; ${avStyle}">${isImage?'':p.avatar}</span> <strong>${p.name}</strong></li>`;
+            }).join('');
         });
 
         function startGame() {
@@ -168,20 +242,34 @@
         socket.on('gameStateUpdate', (data) => {
             document.getElementById('lobby-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
+            document.getElementById('pot-indicator').innerText = `POT: 🪙 ${data.pot}`;
             
-            document.getElementById('pot-indicator').innerText = `Table Pot: 🪙 ${data.pot}`;
+            // Map players inside relative seat coordinates around the poker table container
+            const seatsWrapper = document.getElementById('seats-wrapper');
+            seatsWrapper.innerHTML = "";
             
-            const chipsList = document.getElementById('player-chips-list');
-            chipsList.innerHTML = data.players.map(p => 
-                `<p style="margin:8px 0; font-size:16px;"><span class="avatar-display">${p.avatar}</span> <strong>${p.name}</strong>: ${p.cardCount} cards left | 🪙 ${p.chips} chips</p>`
-            ).join('');
+            data.players.forEach((p, idx) => {
+                const isMyTurn = data.currentTurn === p.id;
+                const isImage = p.avatar.startsWith('data:image');
+                const avStyle = isImage ? `background-image:url('${p.avatar}')` : '';
+                
+                const seatHtml = `
+                    <div class="player-seat seat-${idx} ${isMyTurn ? 'active-turn' : ''}">
+                        <div class="avatar-frame" style="${avStyle}">${isImage ? '' : p.avatar}</div>
+                        <div class="seat-name">${p.name}</div>
+                        <div class="seat-chips">🪙 ${p.chips}</div>
+                        <div class="seat-cards-left">${p.cardCount} cards</div>
+                    </div>
+                `;
+                seatsWrapper.insertAdjacentHTML('beforeend', seatHtml);
+            });
 
             const indicator = document.getElementById('turn-indicator');
             if (data.currentTurn === socket.id) {
-                indicator.innerText = "🔴 IT IS YOUR TURN! Select combo and drop higher cards.";
+                indicator.innerText = "🔴 YOUR TURN! Drop a higher combination.";
             } else {
                 const activePlayer = data.players.find(p => p.id === data.currentTurn);
-                indicator.innerText = `Waiting for ${activePlayer ? activePlayer.name : 'opponent'} to drop cards...`;
+                indicator.innerText = `Waiting for ${activePlayer ? activePlayer.name : 'opponent'}...`;
             }
 
             const lastHandDiv = document.getElementById('last-hand');
@@ -191,7 +279,7 @@
                     return `<div class="card ${isRed}">${c.rank}${c.suit}</div>`;
                 }).join('');
             } else {
-                lastHandDiv.innerHTML = "*(Empty Table - Play any card combo)*";
+                lastHandDiv.innerHTML = "*(Empty Table)*";
             }
         });
 
@@ -204,7 +292,6 @@
             alert(message);
             document.getElementById('game-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
-            selectedHand = [];
         });
 
         socket.on('errorMsg', (msg) => alert(msg));
@@ -212,7 +299,7 @@
         function renderHand() {
             const handDiv = document.getElementById('my-hand');
             handDiv.innerHTML = "";
-            selectedHand = []; 
+            selectedHand = [];
             
             myCards.forEach((card) => {
                 const cardEl = document.createElement('div');
@@ -222,8 +309,7 @@
                 
                 cardEl.onclick = () => {
                     cardEl.classList.toggle('selected');
-                    const isSelected = cardEl.classList.contains('selected');
-                    if (isSelected) {
+                    if (cardEl.classList.contains('selected')) {
                         selectedHand.push(card);
                     } else {
                         selectedHand = selectedHand.filter(c => !(c.rank === card.rank && c.suit === card.suit));
@@ -234,7 +320,7 @@
         }
 
         function playCards() {
-            if (selectedHand.length === 0) return alert("Select at least 1 card to play!");
+            if (selectedHand.length === 0) return alert("Select cards first!");
             socket.emit('playHand', { roomId: currentRoom, selectedCards: selectedHand });
         }
 
