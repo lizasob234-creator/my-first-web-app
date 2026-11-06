@@ -41,6 +41,7 @@
             justify-content: center;
             flex-wrap: wrap;
             margin: 20px 0;
+            min-height: 80px;
         }
         .card {
             background: white;
@@ -48,17 +49,26 @@
             border-radius: 5px;
             padding: 15px 10px;
             margin: 5px;
-            min-width: 40px;
+            min-width: 45px;
             font-size: 20px;
             font-weight: bold;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
             cursor: pointer;
             user-select: none;
+            transition: transform 0.1s ease;
         }
         .red { color: red; }
         .selected {
-            transform: translateY(-15px);
+            transform: translateY(-20px);
             box-shadow: 0px 5px 15px #ffcc00;
+        }
+        .chip-badge {
+            background-color: #ffcc00;
+            color: black;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -76,29 +86,42 @@
         <!-- Waiting Lobby -->
         <div id="lobby-screen" class="hidden">
             <h3>Lobby Room: <span id="display-room"></span></h3>
-            <p>Players connected:</p>
-            <ul id="player-list" style="list-style:none; padding:0;"></ul>
-            <button id="start-btn" onclick="startGame()">Start Game</button>
+            <p>Players connected (Every player starts with 🪙 5,000 chips):</p>
+            <ul id="player-list" style="list-style:none; padding:0; font-size:18px; line-height:2;"></ul>
+            <button id="start-btn" onclick="startGame()">Start Game (Ante: 500)</button>
         </div>
 
         <!-- Active Game Board -->
         <div id="game-screen" class="hidden">
+            <h2 id="pot-indicator" style="color: #ffcc00;">Table Pot: 🪙 0</h2>
             <h3 id="turn-indicator">Waiting for turns...</h3>
-            <div id="table-discard">
-                <p>Last Played Hand:</p>
+            
+            <div id="table-discard" style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                <p style="margin-top:0; font-weight:bold;">Last Played Hand:</p>
                 <div id="last-hand" class="card-area">*(Empty Table)*</div>
             </div>
-            <hr>
-            <h3>Your Cards (13 Cards Dealt)</h3>
+            
+            <hr style="margin: 25px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.2);">
+            
+            <h3>Your Hand (Select cards to drop)</h3>
             <div id="my-hand" class="card-area"></div>
-            <button onclick="passTurn()">Pass</button>
-            <button onclick="playCards()">Play Selected Cards</button>
+            
+            <div style="margin-top: 20px;">
+                <button onclick="passTurn()" style="background-color: #bbbbbb; color: black;">Pass Turn</button>
+                <button onclick="playCards()">Play Selected Cards</button>
+            </div>
+
+            <div style="margin-top: 30px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px;">
+                <h4>Match Standings</h4>
+                <div id="player-chips-list"></div>
+            </div>
         </div>
     </div>
 
     <script>
         const socket = io();
         let myCards = [];
+        let selectedHand = [];
         let currentRoom = "";
 
         function joinGame() {
@@ -115,17 +138,44 @@
 
         socket.on('roomUpdate', (players) => {
             const list = document.getElementById('player-list');
-            list.innerHTML = players.map(p => `<li>👤 ${p.name}</li>`).join('');
+            list.innerHTML = players.map(p => `<li>👤 ${p.name} <span class="chip-badge">🪙 ${p.chips}</span></li>`).join('');
         });
 
         function startGame() {
             socket.emit('startGame', currentRoom);
         }
 
-        socket.on('gameStarted', (data) => {
+        socket.on('gameStateUpdate', (data) => {
             document.getElementById('lobby-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
-            updateTurn(data.currentTurn);
+            
+            document.getElementById('pot-indicator').innerText = `Table Pot: 🪙 ${data.pot}`;
+            
+            // Render active game room status list
+            const chipsList = document.getElementById('player-chips-list');
+            chipsList.innerHTML = data.players.map(p => 
+                `<p style="margin:5px 0;">👤 <strong>${p.name}</strong>: ${p.cardCount} cards left | 🪙 ${p.chips} chips</p>`
+            ).join('');
+
+            // Highlight whose turn it is
+            const indicator = document.getElementById('turn-indicator');
+            if (data.currentTurn === socket.id) {
+                indicator.innerText = "🔴 IT IS YOUR TURN! Select combos and drop cards.";
+            } else {
+                const activePlayer = data.players.find(p => p.id === data.currentTurn);
+                indicator.innerText = `Waiting for ${activePlayer ? activePlayer.name : 'opponents'} to drop cards...`;
+            }
+
+            // Display table pool's last played hand
+            const lastHandDiv = document.getElementById('last-hand');
+            if (data.lastHand && data.lastHand.length > 0) {
+                lastHandDiv.innerHTML = data.lastHand.map(c => {
+                    const isRed = c.suit === '♦' || c.suit === '♥' ? 'red' : '';
+                    return `<div class="card ${isRed}">${c.rank}${c.suit}</div>`;
+                }).join('');
+            } else {
+                lastHandDiv.innerHTML = "*(Empty Table - Play any card configuration)*";
+            }
         });
 
         socket.on('yourCards', (cards) => {
@@ -133,39 +183,46 @@
             renderHand();
         });
 
+        socket.on('gameOver', (message) => {
+            alert(message);
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+            selectedHand = [];
+        });
+
+        socket.on('errorMsg', (msg) => alert(msg));
+
         function renderHand() {
             const handDiv = document.getElementById('my-hand');
             handDiv.innerHTML = "";
-            myCards.forEach((card, index) => {
+            selectedHand = []; // reset tracking
+            
+            myCards.forEach((card) => {
                 const cardEl = document.createElement('div');
                 cardEl.className = 'card';
                 if (card.suit === '♦' || card.suit === '♥') cardEl.classList.add('red');
                 cardEl.innerText = card.rank + card.suit;
                 
-                // Toggle card selection
                 cardEl.onclick = () => {
                     cardEl.classList.toggle('selected');
+                    const isSelected = cardEl.classList.contains('selected');
+                    if (isSelected) {
+                        selectedHand.push(card);
+                    } else {
+                        selectedHand = selectedHand.filter(c => !(c.rank === card.rank && c.suit === card.suit));
+                    }
                 };
                 handDiv.appendChild(cardEl);
             });
         }
 
-        function updateTurn(activePlayerId) {
-            const indicator = document.getElementById('turn-indicator');
-            if (activePlayerId === socket.id) {
-                indicator.innerText = "🔴 IT IS YOUR TURN! Play your lowest card combo.";
-            } else {
-                indicator.innerText = "Waiting for opponents to drop cards...";
-            }
-        }
-
         function playCards() {
-            // Placeholder click action - logic handled on expansion
-            alert("Card evaluation logic will process here!");
+            if (selectedHand.length === 0) return alert("Select at least 1 card to play!");
+            socket.emit('playHand', { roomId: currentRoom, selectedCards: selectedHand });
         }
 
         function passTurn() {
-            alert("Passed turn!");
+            socket.emit('passTurn', currentRoom);
         }
     </script>
 </body>
